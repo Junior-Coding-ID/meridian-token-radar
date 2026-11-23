@@ -1,3 +1,4 @@
+// Meridian v2 — offline dashboard. Top 5 spotlight added; valuation range shown per protocol.
 (() => {
   'use strict';
   const root = document.getElementById('content'),
@@ -93,6 +94,18 @@
   const linkTo = (p) => esc(url({ p: p.slug }));
   const nameCell = (p, sub) =>
     `<div class="namewrap">${badge(p)}<span><a href="${linkTo(p)}" class="rowname" style="text-decoration:none">${esc(p.name)}</a><span class="sub">${esc(sub)}</span></span></div>`;
+  // v2: Top 5 spotlight — the five largest implied caps, with their peer range, up front.
+  // Rank numbers are shown twice: as a badge and in the label, so the order is clear at a glance.
+  function spotlight(list) {
+    const top = V.topFive ? V.topFive(list) : [...list].sort((a, b) => b.implied_value_usd - a.implied_value_usd).slice(0, 5);
+    if (!top.length) return '';
+    return `<div class="panel"><div class="panelhead"><h2>Top 5 by implied cap</h2><span class="cap">peer range shown</span></div><ul class="worksheet">${top
+      .map(
+        (p) =>
+          `<li data-rank="${p.rank}"><span class="ranknum" aria-label="Rank ${p.rank}">#${p.rank}</span><span>${esc(p.name)}<small>${esc(p.cohort)} · ${esc(p.category || 'Other')}</small></span><b>${short(p.implied_value_usd)}</b><small>${short(p.valuation.low)} – ${short(p.valuation.high)}</small></li>`,
+      )
+      .join('')}</ul></div>`;
+  }
   function curve(list) {
     const a = [...list].sort((p, q) => p.rank - q.rank);
     if (!a.length) return '<div class="curve"><h2>Valuation curve</h2><p>No matching protocols.</p></div>';
@@ -188,7 +201,7 @@
         'Token launch radar',
         'Estimated circulating market caps and farm plans for protocols with no token recorded.',
       ) +
-      `<div class="hero-grid">${curve(list)}${coverage()}</div><div class="sectionhead"><h2>Ranked protocols <span class="total">${list.length}</span></h2>${modeButtons(
+      `<div class="hero-grid">${curve(list)}${coverage()}</div>${spotlight(list)}<div class="sectionhead"><h2>Ranked protocols <span class="total">${list.length}</span></h2>${modeButtons(
         'cohort',
         [
           ['All', 'All candidates'],
