@@ -100,9 +100,10 @@ const meta = {
   floor_usd: snapshot.floor_usd,
   currency: 'USD',
   target: 'Hypothetical circulating market cap conditional on launch',
-  model: 'Meridian / pooled log multiples v1',
+  model: 'Meridian / pooled log multiples v2',
   counts,
   crosscheck: compare,
+  top5: V.topFive(rows).map((r) => ({ rank: r.rank, slug: r.slug, name: r.name, implied_value_usd: r.implied_value_usd, low: r.valuation.low, high: r.valuation.high })),
 };
 const board = { metadata: meta, rows };
 const slim = (x: { p: Protocol; status: string }) => ({ ...x.p, status: x.status });
