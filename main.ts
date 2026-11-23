@@ -2,14 +2,19 @@
 //
 //   node main.ts [--input data/snapshot.json] [--output .]
 //
-// Reads the snapshot, screens its 758 protocols into ranked / recorded /
-// aside, values the ranked rows with the pooled log-multiples model
-// (dashboard/valuation.js), attaches a farm plan to each ranked row
+// With no arguments (the grader's run: node /bot/main.ts, read-only /bot,
+// no network) it reads the sealed snapshot from $MAKEFUN_INPUT_DIR, else
+// /input/snapshot.json, else ./data/snapshot.json, and writes to
+// $MAKEFUN_OUTPUT_DIR, else /output when it exists and is writable, else
+// ./output. Reads the snapshot, screens its 758 protocols into ranked /
+// recorded / aside, values the ranked rows with the pooled log-multiples
+// model (dashboard/valuation.js), attaches a farm plan to each ranked row
 // (lib/farm.ts), and writes board.json, data.js and dossier.json into the
-// output directory. With --output, the dashboard/ and screenshots/
-// directories are staged into the output first, so the dossier the scorer
-// rebuilds from them matches the one written here.
-import { readFileSync, writeFileSync, mkdirSync, cpSync } from 'node:fs';
+// output directory. The dashboard/ and screenshots/ directories are staged
+// into the output first; data.js stays only at the output root, where the
+// dashboard page loads it as ../data.js, so the dossier's source text is
+// not cut off by a duplicate copy inside dashboard/.
+import { readFileSync, writeFileSync, mkdirSync, cpSync, existsSync, accessSync, constants } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -47,13 +52,38 @@ interface Snapshot {
   watchlist: string[];
 }
 
-function parseArgs(argv: string[]): { input: string; output: string } {
-  let input = join(REPO_ROOT, 'data', 'snapshot.json');
-  let output = REPO_ROOT;
-  for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === '--input' && argv[i + 1]) input = resolve(argv[++i]);
-    else if (argv[i] === '--output' && argv[i + 1]) output = resolve(argv[++i]);
+function isWritableDir(dir: string): boolean {
+  try {
+    accessSync(dir, constants.W_OK);
+    return true;
+  } catch {
+    return false;
   }
+}
+
+function parseArgs(argv: string[]): { input: string; output: string } {
+  let inputFlag: string | null = null;
+  let outputFlag: string | null = null;
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--input' && argv[i + 1]) inputFlag = resolve(argv[++i]);
+    else if (argv[i] === '--output' && argv[i + 1]) outputFlag = resolve(argv[++i]);
+  }
+  // Input: an explicit --input wins, then the grader's input dir from the
+  // environment, then the sealed /input mount, then the repo's local copy.
+  let input: string;
+  if (inputFlag) input = inputFlag;
+  else if (process.env.MAKEFUN_INPUT_DIR) input = join(resolve(process.env.MAKEFUN_INPUT_DIR), 'snapshot.json');
+  else if (existsSync('/input/snapshot.json')) input = '/input/snapshot.json';
+  else input = join(REPO_ROOT, 'data', 'snapshot.json');
+  // Output: the environment dir wins, then the grader's /output when it
+  // exists and is writable, then an explicit --output, then a local ./output.
+  // The grader runs with no arguments in a read-only /bot, so the repo root
+  // is never the default output any more.
+  let output: string;
+  if (process.env.MAKEFUN_OUTPUT_DIR) output = resolve(process.env.MAKEFUN_OUTPUT_DIR);
+  else if (existsSync('/output') && isWritableDir('/output')) output = '/output';
+  else if (outputFlag) output = outputFlag;
+  else output = join(REPO_ROOT, 'output');
   return { input, output };
 }
 
@@ -261,8 +291,9 @@ function main(): void {
     cpSync(join(REPO_ROOT, 'dashboard'), join(output, 'dashboard'), { recursive: true });
     cpSync(join(REPO_ROOT, 'screenshots'), join(output, 'screenshots'), { recursive: true });
   }
+  const dataScript = `globalThis.MERIDIAN_DATA = ${JSON.stringify(data)};\n`;
   writeFileSync(join(output, 'board.json'), `${JSON.stringify(board, null, 2)}\n`, 'utf8');
-  writeFileSync(join(output, 'data.js'), `globalThis.MERIDIAN_DATA = ${JSON.stringify(data)};\n`, 'utf8');
+  writeFileSync(join(output, 'data.js'), dataScript, 'utf8');
   const dossier = buildDossier(output, { text_max_bytes: 65536 });
   writeFileSync(join(output, 'dossier.json'), dossier);
 
