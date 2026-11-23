@@ -1,3 +1,4 @@
+// Meridian v2 — farm playbooks: one usable, read-first plan per ranked protocol.
 import { watchlistNotes } from './watchlist-notes.ts';
 export type Protocol = {
   slug: string;
@@ -11,6 +12,7 @@ export type Protocol = {
   gecko_id: string | null;
   symbol: string | null;
 };
+export const FARM_PLAN_VERSION = 'v2';
 type Route = { label: string; inspect: string; action: string; exit: string; mode?: 'Observe'; risk: string };
 const route = (
   label: string,
@@ -159,7 +161,7 @@ const specifics: Record<string, Specific> = {
     source: 'Morpho · Steakhouse curator directory',
     url: 'https://app.morpho.org/curator/steakhouse-financial',
     inspect:
-      'In the Morpho curator directory, filter for Steakhouse Financial and Base. Open a listed USDC vault and compare its liquidity, collateral and fees.',
+      'In the Morpho curator directory, filter for Steakhouse Financial and Base. Open a listed USDC vault and compare its liquidity, collateral and fees. Note the vault risk tier and the low–high peer range before any preview.',
     action:
       'Preview a USDC deposit to that specific Steakhouse vault. Record the share estimate and contract address; compare the vault risk tier before entry.',
     exit: 'Preview redeeming the same shares to USDC. Check available liquidity, keep the vault address and save both receipts if executed.',
@@ -325,5 +327,11 @@ export function plan(p: Protocol) {
       url: specific?.url || 'https://defillama.com/protocol/' + encodeURIComponent(p.slug),
     },
     source_grade: specific ? 'Named product research' : 'Category-based checklist',
+    version: FARM_PLAN_VERSION,
   };
+}
+// v2: one-line summary of a plan, used by the dashboard spotlight.
+export function planSummary(p: Protocol) {
+  const p2 = plan(p);
+  return `${p.name} · ${p2.chain} · ${p2.mode} · ${p2.route}`;
 }
