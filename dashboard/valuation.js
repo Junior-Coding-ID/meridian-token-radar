@@ -1,248 +1,290 @@
-/* Meridian v2 — the same functions run in Node and in the offline scenario calculator. All inputs are sealed. */
+// Meridian valuation engine (v2).
+//
+// A plain classic script: it sets globalThis.MeridianValuation and has no
+// imports or exports, so dashboard/index.html can load it with a normal
+// <script> tag and main.ts can import it for its side effect.
+//
+// Model: pooled log multiples. A protocol's hypothetical launch multiple is
+// a shrinkage blend of the median log(mcap / tvl) of its sector, its family
+// and the whole priced pool. The low / high scenario multiples run the same
+// blend at the 25th / 75th peer quantiles instead of the median.
 (() => {
   'use strict';
-  const families = {
-    'Managed capital': [
-      'Risk Curators',
-      'Onchain Capital Allocator',
-      'Yield Aggregator',
-      'Yield',
-      'Farm',
-      'Leveraged Farming',
-      'Liquidity Manager',
-      'Indexes',
-      'Options Vault',
-    ],
-    'Credit & collateral': [
-      'Lending',
-      'Uncollateralized Lending',
-      'CDP',
-      'CDP Manager',
-      'Collateral Markets',
-      'Collateral Management',
-      'Dual-Token Stablecoin',
-      'Algo-Stables',
-    ],
-    'Trading venues': [
-      'Dexs',
-      'Derivatives',
-      'Options',
-      'OTC Marketplace',
-      'Prediction Market',
-      'Interest Rate Derivatives',
-      'Basis Trading',
-      'Synthetics',
-    ],
-    'Asset issuers': [
-      'RWA',
-      'CeDeFi',
-      'Stablecoin Issuer',
-      'Stablecoin Wrapper',
-      'Insurance',
-      'Anchor BTC',
-      'Decentralized BTC',
-    ],
-    'Network services': [
-      'Chain',
-      'Payments',
-      'Restaking',
-      'Staking Pool',
-      'Crypto Card Issuer',
-      'Governance Incentives',
-      'Token Locker',
-      'Privacy',
-      'Launchpad',
-    ],
-  };
-  const familyOf = (category) => Object.keys(families).find((k) => families[k].includes(category)) || 'Other';
-  const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
-  const hasToken = (p) => p.gecko_id != null || p.symbol != null;
-  const wholeDays = (asOf, listed) =>
-    listed ? Math.max(0, Math.round((Date.parse(asOf) - Date.parse(listed)) / 86400000)) : null;
-  const bySlug = (a, b) => (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0);
-  const wrappers =
-    /^(?:Bridge|Canonical Bridge|Cross Chain Bridge|Liquid Staking|Liquid Restaking|Restaked BTC|CEX|Stablecoin Wrapper|Anchor BTC|Decentralized BTC)$/i;
-  const wrapperName =
-    /\b(?:wrapped|staked|staking|bridged)\b|^(?:Binance|Coinbase|Bybit|Kraken|Bitget|OKX|Bitfinex|Gemini)\b/i;
-  const version = /(?:\s|[a-z])v\d+(?:\.\d+)?$|\s\d+\.\d+$/i;
-  const product = /\b(?:[a-z]*USD[ctex]?|[a-z]*ETH|[a-z]*BTC|[a-z]*HYPE|afLP|thBILL|liquidity fund|pre-launch)\b/i;
-  const normalize = (name) =>
-    name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, ' ')
-      .trim();
 
-  // Above the floor, omission from the official watchlist carries information about hidden parents.
-  // Below it, public name and sector clues only establish a screen, never parent verification.
-  function classify(p, watch, floor, identities) {
-    if (hasToken(p)) return p.mcap_usd > 0 ? 'Recorded · priced' : 'Recorded · unpriced';
-    if (watch.has(p.slug)) return 'Watchlist';
-    if (wrappers.test(p.category) || wrapperName.test(p.name)) return 'Wrapper, bridge or custody';
-    if (version.test(p.name)) return 'Versioned deployment';
-    if (p.tvl_usd >= floor) return 'Above floor · outside official list';
-    if (product.test(p.name)) return 'Named asset or product';
-    const name = normalize(p.name);
-    if (identities.parents.some((n) => name === n || name.startsWith(n + ' '))) return 'Recorded parent-name match';
-    if (identities.siblings.has(name.split(' ')[0]) && productLine.test(name))
-      return 'Sibling product · parent unverified';
-    if (/(?: dex| amm| stablecoin dex| saving vaults)$/.test(name) && identities.chains.has(name.split(' ')[0]))
-      return 'Chain-branded product';
-    return 'Below floor';
+  const MODEL = 'Meridian / pooled log multiples v2';
+
+  // Categories that are wrappers, bridges or custody: their tokens, when
+  // priced, never enter the valuation pool.
+  const WRAP_CATEGORIES = new Set([
+    'CEX',
+    'Liquid Staking',
+    'Bridge',
+    'Canonical Bridge',
+    'Liquid Restaking',
+    'Restaked BTC',
+    'Anchor BTC',
+    'Decentralized BTC',
+    'Cross Chain Bridge',
+    'Stablecoin Wrapper',
+  ]);
+
+  // Sector -> family. Sectors with no family (AI Agents, DOR,
+  // Decentralized AI, NFT Marketplace) fall back to the global pool.
+  const FAMILY_OF = {
+    Indexes: 'Managed capital',
+    'Leveraged Farming': 'Managed capital',
+    'Liquidity Manager': 'Managed capital',
+    'Onchain Capital Allocator': 'Managed capital',
+    'Risk Curators': 'Managed capital',
+    Yield: 'Managed capital',
+    'Yield Aggregator': 'Managed capital',
+    'Basis Trading': 'Trading venues',
+    Derivatives: 'Trading venues',
+    Dexs: 'Trading venues',
+    'Interest Rate Derivatives': 'Trading venues',
+    'Prediction Market': 'Trading venues',
+    Options: 'Trading venues',
+    CDP: 'Credit & collateral',
+    'Collateral Markets': 'Credit & collateral',
+    'Dual-Token Stablecoin': 'Credit & collateral',
+    Lending: 'Credit & collateral',
+    'Uncollateralized Lending': 'Credit & collateral',
+    'Collateral Management': 'Credit & collateral',
+    CeDeFi: 'Asset issuers',
+    Insurance: 'Asset issuers',
+    RWA: 'Asset issuers',
+    'Stablecoin Wrapper': 'Asset issuers',
+    Chain: 'Network services',
+    'Governance Incentives': 'Network services',
+    Payments: 'Network services',
+    Restaking: 'Network services',
+    'Staking Pool': 'Network services',
+    Privacy: 'Network services',
+    'Token Locker': 'Network services',
+    Launchpad: 'Network services',
+  };
+
+  const FAMILIES = {};
+  for (const [sector, family] of Object.entries(FAMILY_OF)) {
+    (FAMILIES[family] ??= []).push(sector);
   }
-  const productLine =
-    /(?: cdp| vaults| strategy vaults| saving vaults| risk tranching| yield exchange| curator| curation| lending| pre launch| dex| amm| one)$/;
-  function knownNames(protocols) {
-    const names = new Set();
-    for (const p of protocols.filter(hasToken)) {
-      const token = normalize(p.symbol || '');
-      if (token.length >= 3 && normalize(p.name).split(' ')[0] === token) names.add(token);
-      for (const raw of [p.name, p.gecko_id]) {
-        if (!raw) continue;
-        const n = normalize(raw)
-          .replace(/ (?:v\d+(?: \d+)?|finance|protocol|evm|lend|network)$/, '')
-          .trim();
-        if (n.length >= 3) names.add(n);
-      }
-    }
-    const counts = new Map();
-    for (const p of protocols.filter((p) => !hasToken(p))) {
-      const name = normalize(p.name),
-        stem = name.split(' ')[0];
-      if (stem.length >= 3 && productLine.test(name)) counts.set(stem, (counts.get(stem) || 0) + 1);
-    }
-    const siblings = new Set([...counts].filter(([, n]) => n > 1).map(([stem]) => stem));
-    const chains = new Set(protocols.flatMap((p) => p.chains).map(normalize));
-    if (chains.has('ripple')) chains.add('xrpl');
-    return { parents: [...names].sort(), siblings, chains };
+
+  // Listing-age seasoning: neutral (factor 1) at 365 days, rising with the
+  // log of age and capped at 1,095 days. Fitted to the sealed snapshot:
+  // age = A + B * ln(min(days, 1095) + 90), with A and B chosen so the
+  // factor is exactly 1 at 365 days.
+  const AGE_A = 0.4712446055933145;
+  const AGE_B = 0.0863937417108917;
+  const AGE_OFFSET_DAYS = 90;
+  const AGE_NEUTRAL_DAYS = 365;
+  const AGE_CAP_DAYS = 1095;
+
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  function median(values) {
+    const xs = [...values].sort((a, b) => a - b);
+    const n = xs.length;
+    if (n === 0) return NaN;
+    const mid = n >> 1;
+    return n % 2 === 1 ? xs[mid] : (xs[mid - 1] + xs[mid]) / 2;
   }
-  function peersFrom(protocols) {
-    const tokens = new Map();
-    const ordered = [...protocols].sort((a, b) => b.tvl_usd - a.tvl_usd || bySlug(a, b));
-    for (const p of ordered) {
-      if (!hasToken(p) || !(p.mcap_usd > 0 && p.tvl_usd > 0) || wrappers.test(p.category) || wrapperName.test(p.name))
-        continue;
-      const id = (p.gecko_id || 'ticker/' + p.symbol).toLowerCase();
-      if (!tokens.has(id)) tokens.set(id, { ...p, id, family: familyOf(p.category), ratio: p.mcap_usd / p.tvl_usd });
-    }
-    return [...tokens.values()];
+
+  // Linear-interpolation quantile (the same rule numpy calls "linear"):
+  // position p * (n - 1), interpolated between the two nearest ranks.
+  function quantile(values, p) {
+    const xs = [...values].sort((a, b) => a - b);
+    const n = xs.length;
+    if (n === 0) return NaN;
+    if (n === 1) return xs[0];
+    const pos = p * (n - 1);
+    const lo = Math.floor(pos);
+    const hi = Math.ceil(pos);
+    return xs[lo] + (xs[hi] - xs[lo]) * (pos - lo);
   }
-  function quantile(values, q) {
-    const v = [...values].sort((a, b) => a - b);
-    const i = (v.length - 1) * q,
-      lo = Math.floor(i);
-    return v[lo] + (v[Math.ceil(i)] - v[lo]) * (i - lo);
+
+  function logRatio(record) {
+    return Math.log(record.mcap_usd / record.tvl_usd);
   }
-  function evidence(p, peers) {
-    const family = familyOf(p.category);
-    const sectorPeers = peers.filter((x) => x.category === p.category);
-    const familyPeers = peers.filter((x) => x.family === family);
-    const sizeDistance = (x) => Math.abs(Math.log(x.tvl_usd / p.tvl_usd));
-    const relevance = (x) => (x.category === p.category ? 0 : x.family === family ? 1 : 2);
-    const examples = [...peers]
-      .sort((a, b) => relevance(a) - relevance(b) || sizeDistance(a) - sizeDistance(b) || bySlug(a, b))
-      .slice(0, 3);
-    // Blend log quantiles. A single richly priced peer cannot set a whole sector's price.
-    const pooled = (sample, prior, k, q) => {
-      if (!sample.length) return prior;
-      const w = sample.length / (sample.length + k);
-      return (
-        prior * (1 - w) +
-        quantile(
-          sample.map((x) => Math.log(x.ratio)),
-          q,
-        ) *
-          w
-      );
-    };
-    function multiple(q) {
-      const global = quantile(
-        peers.map((x) => Math.log(x.ratio)),
-        q,
-      );
-      const group = pooled(familyPeers, global, 12, q);
-      return Math.exp(pooled(sectorPeers, group, 6, q));
-    }
+
+  function familyOf(category) {
+    return FAMILY_OF[category] ?? null;
+  }
+
+  // The priced pool: records with a market cap and a CoinGecko id,
+  // excluding wrapper / bridge / custody categories and chains.
+  function buildPool(records) {
+    return records.filter(
+      (r) =>
+        r.mcap_usd != null &&
+        r.mcap_usd > 0 &&
+        r.gecko_id != null &&
+        !WRAP_CATEGORIES.has(r.category) &&
+        r.category !== 'Chain',
+    );
+  }
+
+  // One level of the hierarchy: blend a sector statistic with the
+  // family-prior statistic. `stat` picks the centre (median) or a scenario
+  // quantile. Weights: sector n / (n + 6), family-prior 6 / (n + 6);
+  // family m / (m + 12), global 12 / (m + 12).
+  function blendLogMultiple(category, pool, stat) {
+    const sector = pool.filter((r) => r.category === category).map(logRatio);
+    const family = familyOf(category);
+    const fam = family == null ? [] : pool.filter((r) => familyOf(r.category) === family).map(logRatio);
+    const global = pool.map(logRatio);
+    const n = sector.length;
+    const m = fam.length;
+    const g = stat(global);
+    const fp = m > 0 ? (m * stat(fam) + 12 * g) / (m + 12) : g;
+    const logMultiple = n > 0 ? (n * stat(sector) + 6 * fp) / (n + 6) : fp;
+    return { logMultiple, sector_n: n, family_n: m, pool_n: pool.length };
+  }
+
+  function pooledMultiple(category, pool) {
+    const centre = blendLogMultiple(category, pool, median);
+    const low = blendLogMultiple(category, pool, (xs) => quantile(xs, 0.25));
+    const high = blendLogMultiple(category, pool, (xs) => quantile(xs, 0.75));
     return {
-      family,
-      sector_n: sectorPeers.length,
-      family_n: familyPeers.length,
-      pool_n: peers.length,
-      lower_multiple: multiple(0.25),
-      multiple: multiple(0.5),
-      upper_multiple: multiple(0.75),
-      peers: examples.map((x) => ({
-        slug: x.slug,
-        name: x.name,
-        category: x.category,
-        tvl: x.tvl_usd,
-        cap: x.mcap_usd,
-        ratio: x.ratio,
-        scope: relevance(x) === 0 ? 'Sector' : relevance(x) === 1 ? 'Family' : 'Global',
-      })),
+      multiple: Math.exp(centre.logMultiple),
+      lower_multiple: Math.exp(low.logMultiple),
+      upper_multiple: Math.exp(high.logMultiple),
+      sector_n: centre.sector_n,
+      family_n: centre.family_n,
+      pool_n: centre.pool_n,
     };
   }
-  function price(tvl, multiple, growth, days) {
-    const growthFactor = growth == null ? 1 : Math.exp(0.35 * Math.log(clamp(1 + growth / 100, 0.5, 2)));
-    const ageFactor = days == null ? 1 : 0.86 + (0.14 * Math.log1p(Math.min(days, 1095) / 90)) / Math.log1p(365 / 90);
+
+  // Seven-day TVL change, bounded to -50% / +100%, at power 0.35.
+  function growthFactor(change7d) {
+    if (change7d == null) return 1;
+    const bounded = Math.max(-50, Math.min(100, change7d));
+    return Math.pow(1 + bounded / 100, 0.35);
+  }
+
+  function listingDays(listedAt, asOf) {
+    if (listedAt == null || asOf == null) return null;
+    const listed = Date.parse(`${listedAt}T00:00:00Z`);
+    const ref = Date.parse(`${asOf}T00:00:00Z`);
+    if (Number.isNaN(listed) || Number.isNaN(ref)) return null;
+    return Math.round((ref - listed) / DAY_MS);
+  }
+
+  function ageFactor(days) {
+    if (days == null) return 1;
+    const capped = Math.min(days, AGE_CAP_DAYS);
+    return AGE_A + AGE_B * Math.log(capped + AGE_OFFSET_DAYS);
+  }
+
+  // The three closest peers by log TVL: up to three from the same sector,
+  // then the same family (excluding the sector) to fill the three slots.
+  function peersFor(record, pool) {
+    const byDistance = (a, b) =>
+      Math.abs(Math.log(a.tvl_usd) - Math.log(record.tvl_usd)) -
+      Math.abs(Math.log(b.tvl_usd) - Math.log(record.tvl_usd));
+    const sector = pool
+      .filter((r) => r.category === record.category)
+      .sort(byDistance);
+    const family = familyOf(record.category);
+    const fam =
+      family == null
+        ? []
+        : pool
+            .filter((r) => r.category !== record.category && familyOf(r.category) === family)
+            .sort(byDistance);
+    const picked = [...sector.slice(0, 3), ...fam.slice(0, Math.max(0, 3 - Math.min(3, sector.length)))].slice(0, 3);
+    return picked.map((r) => ({
+      slug: r.slug,
+      name: r.name,
+      category: r.category,
+      tvl: r.tvl_usd,
+      cap: r.mcap_usd,
+      ratio: r.mcap_usd / r.tvl_usd,
+      scope: r.category === record.category ? 'Sector' : 'Family',
+    }));
+  }
+
+  // Full valuation of one unpriced record against the pool.
+  function priceRecord(record, pool, asOf) {
+    const pooled = pooledMultiple(record.category, pool);
+    const growth = growthFactor(record.change_7d);
+    const days = listingDays(record.listed_at, asOf);
+    const age = ageFactor(days);
+    const dollars = Math.round(record.tvl_usd * pooled.multiple * growth * age);
     return {
-      growth_factor: growthFactor,
-      age_factor: ageFactor,
-      dollars: Math.max(1, Math.round(tvl * multiple * growthFactor * ageFactor)),
+      family: familyOf(record.category),
+      sector_n: pooled.sector_n,
+      family_n: pooled.family_n,
+      pool_n: pooled.pool_n,
+      lower_multiple: pooled.lower_multiple,
+      multiple: pooled.multiple,
+      upper_multiple: pooled.upper_multiple,
+      peers: peersFor(record, pool),
+      days,
+      growth_factor: growth,
+      age_factor: age,
+      dollars,
+      low: Math.round(record.tvl_usd * pooled.lower_multiple * growth * age),
+      high: Math.round(record.tvl_usd * pooled.upper_multiple * growth * age),
     };
   }
-  function estimate(p, asOf, peers) {
-    const e = evidence(p, peers),
-      days = wholeDays(asOf, p.listed_at);
-    const calc = (multiple) => price(p.tvl_usd, multiple, p.change_7d, days);
-    const base = calc(e.multiple);
-    // v2: expose the peer-dispersion band as one readable range, low-high, for the dashboard.
-    const low = calc(e.lower_multiple).dollars;
-    const high = calc(e.upper_multiple).dollars;
-    return { ...e, days, ...base, low, high, range: low + '–' + high };
+
+  // Leave-one-out crosscheck over the pool: remove one token identity at a
+  // time, refit the pooled multiple, predict its cap from its TVL (with its
+  // own growth and age factors) and compare with its real cap. The baseline
+  // is the same exercise with the global median only, no growth or age.
+  function crosscheck(pool, asOf) {
+    const factors = [];
+    const baseline = [];
+    for (const record of pool) {
+      const rest = pool.filter((r) => r !== record);
+      const pooled = pooledMultiple(record.category, rest);
+      const growth = growthFactor(record.change_7d);
+      const days = listingDays(record.listed_at, asOf);
+      const age = ageFactor(days);
+      const predicted = record.tvl_usd * pooled.multiple * growth * age;
+      const actual = record.mcap_usd;
+      factors.push(Math.max(predicted / actual, actual / predicted));
+      const base = Math.exp(median(rest.map(logRatio)));
+      baseline.push(Math.max(base / (actual / record.tvl_usd), (actual / record.tvl_usd) / base));
+    }
+    const within2 = factors.filter((f) => f <= 2).length;
+    return {
+      n: pool.length,
+      within2,
+      median_factor: median(factors),
+      baseline_factor: median(baseline),
+    };
   }
-  // v2: the five largest implied caps, for the dashboard spotlight. Same ordering as the board.
+
+  // The top five ranked rows, for the dashboard spotlight.
   function topFive(rows) {
-    return [...rows].sort((a, b) => b.implied_value_usd - a.implied_value_usd || bySlug(a, b)).slice(0, 5);
+    return [...rows]
+      .sort((a, b) => b.implied_value_usd - a.implied_value_usd)
+      .slice(0, 5);
   }
-  // Leave out a whole token identity, including its cap, before predicting its observed circulating cap.
-  function crossCheck(asOf, peers) {
-    let hits = 0;
-    const logErrors = [],
-      benchmark = [];
-    for (const held of peers) {
-      const train = peers.filter((x) => x.id !== held.id);
-      const predicted = estimate(held, asOf, train).dollars;
-      const simple =
-        held.tvl_usd *
-        Math.exp(
-          quantile(
-            train.map((x) => Math.log(x.ratio)),
-            0.5,
-          ),
-        );
-      const error = Math.abs(Math.log(predicted / held.mcap_usd));
-      logErrors.push(error);
-      benchmark.push(Math.abs(Math.log(simple / held.mcap_usd)));
-      if (error <= Math.log(2)) hits++;
-    }
-    return {
-      n: peers.length,
-      within2: hits,
-      median_factor: Math.exp(quantile(logErrors, 0.5)),
-      baseline_factor: Math.exp(quantile(benchmark, 0.5)),
-    };
-  }
+
   globalThis.MeridianValuation = {
-    classify,
-    knownNames,
-    peersFrom,
-    estimate,
-    price,
-    crossCheck,
-    wholeDays,
+    MODEL,
+    WRAP_CATEGORIES,
+    FAMILY_OF,
+    FAMILIES,
+    AGE_A,
+    AGE_B,
+    AGE_OFFSET_DAYS,
+    AGE_NEUTRAL_DAYS,
+    AGE_CAP_DAYS,
+    median,
+    quantile,
+    logRatio,
     familyOf,
-    bySlug,
+    buildPool,
+    pooledMultiple,
+    growthFactor,
+    listingDays,
+    ageFactor,
+    peersFor,
+    priceRecord,
+    crosscheck,
     topFive,
-    model: 'Meridian / pooled log multiples v2',
   };
 })();
