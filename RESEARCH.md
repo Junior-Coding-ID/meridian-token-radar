@@ -1,0 +1,29 @@
+# Catatan riset Meridian
+
+Riset diakses 23 November 2026. Snapshot menyebut waktu pengambilan data **14 November 2026, 01.18.33,201 UTC**. Nominal TVL, kapitalisasi, umur pencatatan dan perubahan mingguan selalu berasal dari snapshot. Informasi sesudah tanggal itu hanya memberi konteks operasional. Angka yang tampil hari ini di situs sumber bisa berbeda.
+
+## Sumber dan keputusan penggunaan
+
+| Topik | Temuan dan penerapannya | Sumber |
+| --- | --- | --- |
+| Bounty | Input tersegel, ukuran dan format keluaran, watchlist minimum serta ketentuan bukti sesi berasal dari penyelenggara. | [Brief](https://make.fun/bounty/token-radar-01) · [Intake resmi](https://make.fun/api/competitions/token-radar-01/requirements) · [Kit](https://make.fun/c/token-radar-01/kit) |
+| Data DeFi | TVL mengukur aset menurut metodologi adapter. TVL bisa berubah akibat harga aset, aturan pencatatan atau perpindahan modal. Radar membatasi pengaruh perubahan tujuh hari, dan tidak memperlakukannya sebagai jumlah pengguna baru atau pendapatan. | [Metodologi TVL DefiLlama](https://docs.llama.fi/list-your-project/what-to-include-as-tvl) · [Dashboard tokenless](https://defillama.com/airdrops) |
+| Valuasi | Kapitalisasi beredar menggunakan pasokan yang beredar. FDV memakai basis pasokan yang lebih luas. Snapshot menyediakan kapitalisasi untuk sebagian peer, tetapi tidak menyediakan pasokan hipotetis proyek yang belum meluncurkan token. | [Metodologi CoinGecko](https://www.coingecko.com/en/methodology) · [Penjelasan FDV](https://www.coingecko.com/learn/what-is-fully-diluted-valuation-fdv-in-crypto) |
+| Launch dan distribusi | Peluncuran UNI memberi contoh historis bagaimana penyelenggara membedakan pengguna dan penyedia likuiditas. Arbitrum memakai kriteria aktivitas, periode dan ambang sendiri. Kedua preseden hanya menjelaskan mengapa receipt, jalur dan tanggal interaksi penting. | [Pengumuman UNI](https://blog.uniswap.org/uni) · [Kriteria ARB](https://docs.arbitrum.foundation/airdrop-eligibility-distribution) |
+| Media sosial dan komunitas | Di forum Uniswap, pengguna Dharma membahas kontribusi lewat perantara yang memerlukan penilaian tersendiri. Di forum Morpho, Steakhouse menjelaskan perbedaan lini vault. Ini memengaruhi pemeriksaan alamat kontrak, underlying dan pihak yang mencatat aktivitas. | [Diskusi governance Uniswap](https://gov.uniswap.org/t/announcing-dharmas-intention-to-propose-the-retroactive-uni-distribution/7450) · [Posting Steakhouse di forum Morpho](https://forum.morpho.org/t/key-information-on-steakhouse-branded-vaults/1343) |
+| Kanal komunitas proyek | Arsip Telegram Curvance memuat peringatan proyek tentang listing CVE tidak resmi pada saat pengumuman. Konteks tersebut mendukung langkah verifikasi tautan dan kontrak. Sebuah pesan historis tidak menetapkan status token per hari ini. | [Telegram Curvance](https://t.me/s/curvance) · [Transparansi pasar Curvance](https://app.curvance.com/transparency.html) |
+| Desain dashboard | Kriteria editorial Dune menekankan visual yang mudah dibaca, angka dan sumbu yang jelas, cakupan yang bisa diurai dan metodologi yang dapat ditelusuri. Meridian memakai kurva valuasi bersumbu log, tabel angka persis, profil individual dan audit semua input. | [Dune Editor’s Pick](https://dune.com/blog/editors-pick-on-dune) |
+| Farm vault | Morpho menampilkan kurator, aset, eksposur dan likuiditas vault. Veda mendokumentasikan antrean penarikan. Pada Symbiotic, permintaan keluar dan klaim terkait epoch. Praktiknya berbeda pada tiap produk. | [Steakhouse di Morpho](https://app.morpho.org/curator/steakhouse-financial) · [Veda BoringQueue](https://sdk.veda.tech/docs/boring-queue-ui-integration) · [Vault Symbiotic](https://docs.symbiotic.fi/learn/core-concepts/vault) |
+| Akses investor | Akses langsung ke produk OnRe memerlukan persyaratan investor. OpenTrade menyediakan proses onboarding. Keduanya mendapat rute observasi dengan anggaran nol di radar. | [OnRe](https://docs.onre.finance/legal) · [OpenTrade](https://docs.opentrade.io/) |
+| Identitas aset | Dokumentasi USDD menjelaskan modul stabilisasi peg. Saturn mendeskripsikan sUSDat sebagai saham vault dengan penebusan asinkron. Mezo mendokumentasikan hak voting melalui veBTC. Identitas tersebut dipisahkan dari nilai hipotetis token protokol yang diminta bounty. | [USDD](https://docs.usdd.io/user-guide/psm-peg-stability-module) · [Saturn](https://github.com/saturn-organization/saturn-yield-dollar) · [Mezo](https://mezo.org/docs/users/mezo-earn/vote/) |
+
+## Membaca sumber
+
+**Watchlist.** Setiap satu dari 40 protokol mendapat catatan rute tersendiri dan rujukan yang dapat dibaca sebagai teks di halaman detail. Direktori resmi, dokumentasi proyek, forum governance, sumber penerbit jaringan dan metodologi adapter dipakai sesuai cakupannya. Referensi kurator pihak ketiga seperti MorphoWatch atau Yearn Curation memerlukan konfirmasi kembali di antarmuka produk sebelum transaksi.
+
+**Di bawah ambang.** Untuk 107 kandidat tambahan, snapshot hanya cukup untuk mengidentifikasi profil produk dan jaringan pencatatan. Rencana berdasarkan kategori ditandai secara eksplisit. Tautan DefiLlama pada profil membantu menemukan kanal proyek dan memverifikasi bahwa produk, jaringan, dan aksesnya masih sesuai.
+
+**Tanggal dan eksposur.** Snapshot memasukkan protokol dengan TVL sedikitnya $5 juta. Angka di beberapa vault, kurator dan jaringan bisa merepresentasikan modal yang beririsan. Meridian menampilkan distribusi nilai per baris dan tidak menambahkan proyeksi individual menjadi suatu total “nilai airdrop pasar”.
+
+**Ketidakpastian.** Kuartil model mendeskripsikan variasi rasio pada peer. Sampel hanya berisi protokol yang sudah memiliki kapitalisasi yang terukur. Adanya bias seleksi, kelangkaan peer sektor tertentu serta perbedaan hak ekonomi token membatasi transfer model ke calon peluncuran baru. Angka dasar, skenario dan hasil uji silang disajikan bersama.
+

@@ -1,0 +1,13 @@
+{
+  "name": "meridian-token-launch-radar",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": {"node": ">=22.18.0"},
+  "scripts": {
+    "build": "node main.ts",
+    "verify": "node scripts/verify.mjs"
+  }
+}
+
