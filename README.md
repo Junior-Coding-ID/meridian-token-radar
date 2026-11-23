@@ -1,3 +1,7 @@
+![make.fun](https://make.fun/badge/token-radar-01.svg)
+![rank](https://make.fun/badge/token-radar-01/Junior-Coding-ID/meridian-token-radar/rank.svg)
+![reward](https://make.fun/badge/token-radar-01/Junior-Coding-ID/meridian-token-radar/reward.svg)
+
 # Meridian · Token launch radar
 
 An offline research dashboard for the [make.fun token-radar-01 bounty](https://make.fun/bounty/token-radar-01). The 14 November 2026 sealed DefiLlama snapshot produces 147 ranked candidates, including all 40 official watchlist members and 107 discoveries below $50 million TVL. All 758 input records can be inspected. The dashboard and source are in English. The companion guide and complete farm plans are also available in Indonesian in the delivery ZIP.
