@@ -1,4 +1,4 @@
-/* The same functions run in Node and in the offline scenario calculator. All inputs are sealed. */
+/* Meridian v2 — the same functions run in Node and in the offline scenario calculator. All inputs are sealed. */
 (() => {
   'use strict';
   const families = {
@@ -195,7 +195,14 @@
       days = wholeDays(asOf, p.listed_at);
     const calc = (multiple) => price(p.tvl_usd, multiple, p.change_7d, days);
     const base = calc(e.multiple);
-    return { ...e, days, ...base, low: calc(e.lower_multiple).dollars, high: calc(e.upper_multiple).dollars };
+    // v2: expose the peer-dispersion band as one readable range, low-high, for the dashboard.
+    const low = calc(e.lower_multiple).dollars;
+    const high = calc(e.upper_multiple).dollars;
+    return { ...e, days, ...base, low, high, range: low + '–' + high };
+  }
+  // v2: the five largest implied caps, for the dashboard spotlight. Same ordering as the board.
+  function topFive(rows) {
+    return [...rows].sort((a, b) => b.implied_value_usd - a.implied_value_usd || bySlug(a, b)).slice(0, 5);
   }
   // Leave out a whole token identity, including its cap, before predicting its observed circulating cap.
   function crossCheck(asOf, peers) {
@@ -235,5 +242,7 @@
     wholeDays,
     familyOf,
     bySlug,
+    topFive,
+    model: 'Meridian / pooled log multiples v2',
   };
 })();
